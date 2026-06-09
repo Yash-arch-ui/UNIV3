@@ -4,7 +4,7 @@ pragma solidity ^0.8.19;
 import "./libraries/Tick.sol";
 contract CLAMMPool{
     address public token0;
-    address public token1;\
+    address public token1;
     address public _positionManager;
 
     uint160 public sqrtPriceX96;
