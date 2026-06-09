@@ -4,7 +4,7 @@
 //SPDX-License-Identifier:MIT
 pragma solidity ^0.8.19;
 library TickMath{
-    uint160 internal contstant Q96=79228162514264337593543950336;
+    uint160 internal constant Q96=79228162514264337593543950336;
     function getSqrtRatioAtTick(int24 tick) internal pure returns(uint160){
      uint160 step = Q96/10000;
      if(tick>=0){

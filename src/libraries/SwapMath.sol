@@ -19,9 +19,10 @@ library SwapMath {
         )
     {
        sqrtPriceNext=sqrtPriceTarget;
-       amountIn= amountRemaining;
-       amountOut= (amountRemaining*997)/ 1000;
-       feeAmount = amountRemaining - amountOut;
+       amountIn= amountRemaining > 100 ? 100 : amountRemaining;
+       feeAmount = (amountIn * 3) / 1000;
+       amountOut= amountIn - feeAmount;
+  
 
        return (sqrtPriceNext, amountIn, amountOut, feeAmount);
     }
