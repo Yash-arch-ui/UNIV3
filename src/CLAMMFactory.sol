@@ -44,7 +44,7 @@ function createPool( address tokenA, address tokenB,uint24 fee, uint160 sqrtPric
     getPool[token1][token0][fee]=pool;
     allPools.push(pool);
     emit PoolCreated(token0, token1, pool, fee);
-    returns pool;
+    return pool;
 }
 
 function allPoolsLength() external view returns(uint256){

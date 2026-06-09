@@ -16,6 +16,8 @@ contract CLAMMPool{
     uint24 public fee;
     int24 public currentTick;
     uint128 public liquidity;
+    uint256 public feeGrowthGlobal0;
+    uint256 public feeGrowthGlobal1;
 
     Oracle public oracle ;
 
@@ -23,7 +25,6 @@ contract CLAMMPool{
     mapping(int24 => bool) public initializedTicks;
 
     event PositionUpdated(address indexed owner, int24 tickLower, int24 tickUpper,int128 liquidityDelta);
-    event TickCrossed(int24 tick, int128 liquidityNet,uint128 liquidityAfter );
     
 
     constructor(address _token0, address _token1, uint160 _sqrtPriceX96, address _positionManager, address _oracle, uint24 _fee) {
@@ -61,7 +62,6 @@ contract CLAMMPool{
         int128 liquidityNet= ticks[tick].liquidityNet;
         liquidity = LiquidityMath.addLiquidity(liquidity, liquidityNet);
         currentTick= tick;
-        emit TickCrossed(tick, liquidity);
     }
 
     function swap( bool zeroForOne, uint256 amountSpecified) external{
@@ -79,7 +79,9 @@ contract CLAMMPool{
         while(amountRemaining>0){
 
             int24 nextTick= getNextTick(zeroForOne);
+
             uint160 sqrtPriceTarget= TickMath.getSqrtRatioAtTick(nextTick);
+
             (uint160 sqrtPriceNext,
             uint256 amountIn,
             uint256 amountOut,
@@ -89,15 +91,29 @@ contract CLAMMPool{
                 liquidity,
                 amountRemaining
             );
-            require(amountIn>0 , "ZEROAMOUNTIN Not Possible ")
+             address tokenIn;
+             address tokenOut;
 
+             if(zeroForOne){
+             feeGrowthGlobal0 += feeAmount;
+             tokenIn=token0;
+             tokenOut=token1;
+             }else{
+               feeGrowthGlobal1 += feeAmount;
+               tokenIn= token1;
+               tokenOut=token0;
+             }
+
+            require(amountIn>0 , "ZEROAMOUNTIN Not Possible ");
+            require(IERC20(tokenOut).balanceOf(address(this)) >= amountOut, "NOT ENOUGH MONEY IN THE POOL ");
+            IERC20(tokenIn).transferFrom(msg.sender, address(this),amountIn+feeAmount);
             sqrtPriceX96= sqrtPriceNext;
             amountRemaining -= amountIn;
 
             if(sqrtPriceX96== sqrtPriceTarget){
                 crossTick(nextTick);
             }
-
+            IERC20(tokenOut).transfer(msg.sender, amountOut);
             oracle.writeObservation(currentTick);
         }
     }
@@ -148,5 +164,9 @@ contract CLAMMPool{
      require(balance0After >= reserve0 + fee0, "NOT REPAID token0");
      require(balance1After >= reserve1 + fee1, "NOT REPAID token1");
 }
+
+    function getFeeGrowthGloabals() external view returns(uint256, uint256){
+        return( feeGrowthGlobal0,feeGrowthGlobal1);
+    }
 }
 // What does tickQuery means -> given seconds ago , find the obseervation that existed around the timestamp

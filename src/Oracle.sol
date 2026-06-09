@@ -26,7 +26,7 @@ contract Oracle{
         Observation memory last = observations[observations.length - 1 ];
         uint32 timeElapsed = uint32(block.timestamp)-last.timestamp;
         observations.push(Observation({
-            timestamp:uint32(block.timestamp), tickCumulative:last.tickCumulative + int56(int24(currentTick))*int56(timeElapsed) 
+            timestamp:uint32(block.timestamp), tickCumulative:last.tickCumulative + int56(int24(currentTick))*(int56(uint56(timeElapsed)) )
         
         })
         );
