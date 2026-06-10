@@ -6,19 +6,24 @@ import "./libraries/LiquidityMath.sol";
 import "./libraries/TickMath.sol";
 import "./libraries/SwapMath.sol";
 import "./Oracle.sol";
+import "./libraries/FullMath.sol";
+import "./libraries/TickBitmap.sol";
 import "./interfaces/IFlashCallback.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 contract CLAMMPool{
+    using TickBitmap for TickBitmap.Bitmap;
+    TickBitmap.Bitmap internal bitmap;
+
     address public token0;
     address public token1;
- address public positionManager;
+    address public positionManager;
     uint160 public sqrtPriceX96;
     uint24 public fee;
     int24 public currentTick;
     uint128 public liquidity;
     uint256 public feeGrowthGlobal0;
     uint256 public feeGrowthGlobal1;
-
     Oracle public oracle ;
 
     mapping(int24 => Tick.TickInfo) public ticks;
@@ -35,8 +40,9 @@ contract CLAMMPool{
         positionManager = _positionManager;
         oracle=Oracle(_oracle);
         fee=_fee;
-        currentTick=0;
-    }
+        currentTick=TickMath.getTickAtSqrtRatio(_sqrtPriceX96);
+    
+        }    
     modifier onlyPositionManager(){
         require(msg.sender == positionManager,"ONLY BY POS MANAGER");
         _;
@@ -44,12 +50,19 @@ contract CLAMMPool{
 
     function modifyPosition(int24 tickLower, int24 tickUpper, uint128 liquidityDelta) external onlyPositionManager {
 // increase pool liquiidty should not be doneby anyone 
-         initializedTicks[tickLower]=true;
-         initializedTicks[tickUpper]=true;
+        bool lowerWasZero = ticks[tickLower].liquidityGross == 0;
+        bool upperWasZero = ticks[tickUpper].liquidityGross == 0;
          ticks[tickLower].liquidityGross += liquidityDelta;
          ticks[tickLower].liquidityNet += int128(liquidityDelta);
          ticks[tickUpper].liquidityGross += liquidityDelta;
          ticks[tickUpper].liquidityNet -= int128(liquidityDelta);
+         if (lowerWasZero) {
+          bitmap.flipTick(tickLower);
+         }
+
+          if (upperWasZero) {
+            bitmap.flipTick(tickUpper);
+           }
          if(currentTick >= tickLower && currentTick < tickUpper){
             liquidity += liquidityDelta;
          }
@@ -58,6 +71,8 @@ contract CLAMMPool{
     }
         
     function crossTick(int24 tick) internal {
+        ticks[tick].feeGrowthOutside0 =  feeGrowthGlobal0 - ticks[tick].feeGrowthOutside0;
+        ticks[tick].feeGrowthOutside1 = feeGrowthGlobal1 -ticks[tick].feeGrowthOutside1;
         // whenever crosses tick just inclrease the liquidity by liquidityNet of the tick
         int128 liquidityNet= ticks[tick].liquidityNet;
         liquidity = LiquidityMath.addLiquidity(liquidity, liquidityNet);
@@ -85,21 +100,28 @@ contract CLAMMPool{
             (uint160 sqrtPriceNext,
             uint256 amountIn,
             uint256 amountOut,
-            uint256 feeAmount) = SwapMath.computeSwapStep(
+            uint256 feeAmount,
+            bool decision
+           ) = SwapMath.computeSwapStep(
                 sqrtPriceX96,
                 sqrtPriceTarget, 
                 liquidity,
-                amountRemaining
-            );
+                amountRemaining,
+                zeroForOne   );
+                            
              address tokenIn;
              address tokenOut;
 
              if(zeroForOne){
-             feeGrowthGlobal0 += feeAmount;
+             if(liquidity > 0){
+              feeGrowthGlobal0 += feeAmount * 1e18 / liquidity;
+               }
              tokenIn=token0;
              tokenOut=token1;
              }else{
-               feeGrowthGlobal1 += feeAmount;
+                if(liquidity > 0){
+              feeGrowthGlobal1 += feeAmount * 1e18 / liquidity;
+                }
                tokenIn= token1;
                tokenOut=token0;
              }
@@ -108,7 +130,7 @@ contract CLAMMPool{
             require(IERC20(tokenOut).balanceOf(address(this)) >= amountOut, "NOT ENOUGH MONEY IN THE POOL ");
             IERC20(tokenIn).transferFrom(msg.sender, address(this),amountIn+feeAmount);
             sqrtPriceX96= sqrtPriceNext;
-            amountRemaining -= amountIn;
+            amountRemaining -= (amountIn+feeAmount);
 
             if(sqrtPriceX96== sqrtPriceTarget){
                 crossTick(nextTick);
@@ -130,7 +152,7 @@ contract CLAMMPool{
         {
             for(int24 tick= currentTick-1; tick >= -10000; tick--){
                 {
-                    if(initializedTicks[tick]){
+                    if(bitmap.isInitialized(tick)){
                         return tick;
                     }
                     
@@ -139,7 +161,7 @@ contract CLAMMPool{
         }
         else{
             for(int24 tick = currentTick+1; tick <=10000; tick ++){
-                if(initializedTicks[tick]){
+               if(bitmap.isInitialized(tick)){
                     return tick;
                 }
             }
@@ -151,8 +173,17 @@ contract CLAMMPool{
     function flash(uint256 amount0, uint256 amount1, address recipient, bytes calldata data)external {
      uint256 reserve0= IERC20(token0).balanceOf(address(this));
      uint256 reserve1= IERC20(token1).balanceOf(address(this)); 
-     uint256 fee0= (amount0*fee)/1000000;
-     uint256 fee1= (amount1*fee)/1000000;
+   uint256  fee0 = FullMath.mulDiv(
+    amount0,
+    fee,
+    1e6
+    );
+
+uint256 fee1 = FullMath.mulDiv(
+    amount1,
+    fee,
+    1e6
+   );
 
      if(amount0>0) IERC20(token0).transfer(recipient, amount0);
      if(amount1>0) IERC20(token1).transfer(recipient, amount1);
@@ -165,7 +196,7 @@ contract CLAMMPool{
      require(balance1After >= reserve1 + fee1, "NOT REPAID token1");
 }
 
-    function getFeeGrowthGloabals() external view returns(uint256, uint256){
+    function getFeeGrowthGlobals() external view returns(uint256, uint256){
         return( feeGrowthGlobal0,feeGrowthGlobal1);
     }
 }
