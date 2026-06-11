@@ -20,7 +20,8 @@ library SwapMath {
             uint256 feeAmount,
             bool decision
         )
-    {  require(liquidity >0 , "NO_LIQUIDITY");
+    {  
+        require(liquidity >0 , "NO_LIQUIDITY");
        amountIn= amountRemaining > 100 ? 100 : amountRemaining;
        feeAmount = FullMath.mulDiv( amountIn,3,1000);
        uint256 amountInAfterFee= amountIn - feeAmount;

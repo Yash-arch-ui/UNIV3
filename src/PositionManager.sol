@@ -5,12 +5,13 @@ import "./libraries/Position.sol";
 import "./libraries/Tick.sol";
 import "./interfaces/ICLAMMPOOL.sol";
 import "./libraries/FullMath.sol";
-
-contract PositionManager {
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+contract PositionManager is ERC721{
     using Position for Position.PositionInfo;
     address public pool;
-    mapping(bytes32 => Position.PositionInfo) public positions;
-    mapping(int24 => Tick.TickInfo) public ticks;
+
+    mapping(uint256 => Position.PositionInfo) public positions;// mapping each id to position struct 
+    uint256 public nextTokenId;
     event PositionUpdated(
         address indexed owner,
         int24 tickLower,
@@ -18,37 +19,44 @@ contract PositionManager {
         int128 liquidityDelta
     );
 
-    constructor(address _pool) {
-        pool = _pool;
+    constructor(address _pool) ERC721(
+        "CLAMM Position, "CLP"
+    ){
+        pool=_pool;
     }
-
-    function getKey(
+  /*  function getKey(
         address owner,
         int24 tickLower,
         int24 tickUpper
     ) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(owner, tickLower, tickUpper));
-    }
+    }*/
 
     function mint(
         int24 tickLower,
         int24 tickUpper,
-        uint128 liquidity
+        uint256 amount0Desired,
+        uint256 amount1Desired
     ) external {
         require(tickLower < tickUpper, "INVALID_RANGE");
+
         require(liquidity > 0, "ZERO_LIQUIDITY");
-        bytes32 key = getKey(msg.sender, tickLower, tickUpper);
-        Position.PositionInfo storage position = positions[key];
+        uint256 sqrtPriceX96= ICLAMMPool(pool).sqrtPriceX96();
+        tokenId = ++nextTokenId;
+        _safeMint(msg.sender, tokenId);
+         Position.PositionInfo storage position = positions[tokenId];
         position.tickLower = tickLower;
         position.tickUpper = tickUpper;
         position.liquidity += liquidity;
+         
+        ICLAMMPool(pool).modifyPosition(tickLower,tickUpper,int128(liquidity));
+         
 
-        ticks[tickLower].liquidityGross += liquidity;
-        ticks[tickLower].liquidityNet += int128(liquidity);
+        (uint256 feeGrowth0, uint256 feeGrowth1) = ICLAMMPool(pool).getFeeGrowthGlobals();
+        (uint256 feeInside0, uint256 feeInside1) = ICLAMMPool(pool).getFeeGrowthInside(tickLower, tickUpper);
 
-        ticks[tickUpper].liquidityGross += liquidity;
-        ticks[tickUpper].liquidityNet -= int128(liquidity);
-
+        position.feeGrowthInside0Last = feeInside0;
+        position.feeGrowthInside0Last= feeInside1;
         emit PositionUpdated(
             msg.sender,
             tickLower,
@@ -56,35 +64,20 @@ contract PositionManager {
             int128(liquidity)
         );
     }
+
     function increaseLiquidity(
-        int24 tickLower,
-        int24 tickUpper,
+        uint256 tokenId,
         uint128 liquidity
     ) external {
+        updateFees(position);
+        require(ownerOf(tokenId) == msg.sender, "NOT_OWNER");
         require(liquidity > 0, "ZERO_LIQUIDITY");
 
-        bytes32 key = getKey(msg.sender, tickLower, tickUpper);
-        (uint256 feeGrowth0, uint256 feeGrowth1) = ICLAMMPool(pool)
-            .getFeeGrowthGlobals();
+         Position.PositionInfo storage position = positions[tokenId];
+         require(position.liquidity > 0, "POSITION_NOT_FOUND");
+          position.liquidity += liquidity;
 
-        Position.PositionInfo storage position = positions[key];
-
-        require(position.liquidity > 0, "POSITION_NOT_FOUND");
-        updateFees(position);
-
-        
-        
-        position.feeGrowthInside0Last = feeGrowth0;
-        position.feeGrowthInside1Last = feeGrowth1;
-        position.liquidity += liquidity;
-
-        ticks[tickLower].liquidityGross += liquidity;
-        ticks[tickLower].liquidityNet += int128(liquidity);
-
-        ticks[tickUpper].liquidityGross += liquidity;
-        ticks[tickUpper].liquidityNet -= int128(liquidity);
-   
-
+           ICLAMMPool(pool).modifyPosition(position.tickLower,tickUpper,liquidity);
         emit PositionUpdated(
             msg.sender,
             tickLower,
@@ -93,26 +86,18 @@ contract PositionManager {
         );
     }
     function decreaseLiquidity(
-        int24 tickLower,
-        int24 tickUpper,
+        uint256 tokenId,
         uint128 liquidity
     ) external {
+        updateFees(position);
+        require(ownerOf(tokenId) == msg.sender, "NOT_OWNER");
         require(liquidity > 0, "ZERO_LIQUIDITY");
-        bytes32 key = getKey(msg.sender, tickLower, tickUpper);
-        (uint256 feeGrowth0, uint256 feeGrowth1) = ICLAMMPool(pool)
-            .getFeeGrowthGlobals();
-        Position.PositionInfo storage position = positions[key];
-        require(position.liquidity >= liquidity, "INSUFFICIENT_LIQUIDITY");
-            updateFees(position);
-     
-        position.feeGrowthInside0Last = feeGrowth0;
-        position.feeGrowthInside1Last = feeGrowth1;
-        position.liquidity -= liquidity;
-        ticks[tickLower].liquidityGross -= liquidity;
-        ticks[tickLower].liquidityNet -= int128(liquidity);
+        Position.PositionInfo storage position = positions[tokenId];
 
-        ticks[tickUpper].liquidityGross -= liquidity;
-        ticks[tickUpper].liquidityNet += int128(liquidity);
+        require(position.liquidity >= liquidity, "INSUFFICIENT_LIQUIDITY");
+        updateFees(position);
+        position.liquidity -= liquidity;
+        ICLAMMPool(pool).modifyPosition(position.tickLower,position.tickUpper,-int128(liquidity));
 
         emit PositionUpdated(
             msg.sender,
@@ -122,16 +107,19 @@ contract PositionManager {
         );
     }
     function collect(
-        int24 tickLower,
-        int24 tickUpper
+      uint256 tokenId
     ) external returns (uint256 amount0, uint256 amount1) {
-        bytes32 key = getKey(msg.sender, tickLower, tickUpper);
-        Position.PositionInfo storage p = positions[key];
+        updateFees(position);
+        require(ownerOf(tokenId) == msg.sender, "NOT_OWNER");
+        Position.PositionInfo storage p = positions[tokenId];
         updateFees(p);
         amount0 = p.tokensOwed0 ;
         amount1 = p.tokensOwed1;
         p.tokensOwed0 = 0;
         p.tokensOwed1 = 0;
+         if (amount0 > 0 || amount1 > 0) {
+            ICLAMMPool(pool).collect(msg.sender, amount0, amount1);
+        }
     }
 
     function getPosition(
@@ -149,17 +137,17 @@ contract PositionManager {
      uint256 fees0 = FullMath.mulDiv(feeGrowthGlobal0 - position.feeGrowthInside0Last,
       position.liquidity,1e18);
 
-uint256 fees1 = FullMath.mulDiv(feeGrowthGlobal1 - position.feeGrowthInside1Last,
-    position.liquidity, 1e18);
+     uint256 fees1 = FullMath.mulDiv(feeGrowthGlobal1 - position.feeGrowthInside1Last,
+     position.liquidity, 1e18);
+     uint256 growth0= feeInside0 - position.feeGrowthInside0Last;
+     uint256 growth1= feeInside1 - position.feeGrowthInside1Last;
+     position.tokensOwed0 += growth0* position.liquidity;
 
-    position.tokensOwed0 += fees0;
-    position.tokensOwed1 += fees1;
+     position.tokensOwed1 += growth1* position.liquidity;
 
-    position.feeGrowthInside0Last =
-        feeGrowthGlobal0;
-
-    position.feeGrowthInside1Last =
-        feeGrowthGlobal1;
+     position.feeGrowthInside0Last =feeInside0;
+      position.feeGrowthInside1Last =   feeInside1;
+      (uint256 feeInside0, uint256 feeInside1)= ICLAMMPool(pool).getFeeGrowthInside(position.tickLower, position.tickUpper);
 }
 }
 // See PositionManager.sol for creating positions, modifiying positions, nft ownership, tracking users liquidity ranges

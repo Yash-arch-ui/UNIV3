@@ -199,5 +199,47 @@ uint256 fee1 = FullMath.mulDiv(
     function getFeeGrowthGlobals() external view returns(uint256, uint256){
         return( feeGrowthGlobal0,feeGrowthGlobal1);
     }
+function getFeeGrowthInside(int24 tickLower,int24 tickUpper)external view returns (
+    uint256 feeInside0,uint256 feeInside1)
+{
+    uint256 feeBelow0;
+    uint256 feeBelow1;
+
+    uint256 feeAbove0;
+    uint256 feeAbove1;
+
+    if(currentTick >= tickLower){
+        feeBelow0 = ticks[tickLower].feeGrowthOutside0;
+        feeBelow1 = ticks[tickLower].feeGrowthOutside1;
+    } else {
+        feeBelow0 =
+            feeGrowthGlobal0 -ticks[tickLower].feeGrowthOutside0;
+
+        feeBelow1 =
+            feeGrowthGlobal1 -ticks[tickLower].feeGrowthOutside1;
+    }
+
+    if(currentTick < tickUpper){
+        feeAbove0 = ticks[tickUpper].feeGrowthOutside0;
+        feeAbove1 = ticks[tickUpper].feeGrowthOutside1;
+    } else {
+        feeAbove0 =
+            feeGrowthGlobal0 -
+            ticks[tickUpper].feeGrowthOutside0;
+
+        feeAbove1 =
+            feeGrowthGlobal1 -
+            ticks[tickUpper].feeGrowthOutside1;
+    }
+
+    feeInside0 =
+        feeGrowthGlobal0 -
+        feeBelow0 -
+        feeAbove0;
+
+    feeInside1 =
+        feeGrowthGlobal1 -
+        feeBelow1 -
+        feeAbove1;
 }
-// What does tickQuery means -> given seconds ago , find the obseervation that existed around the timestamp
+}
