@@ -55,13 +55,6 @@ library SwapMath {
         amountOut=SqrtPriceMath.getAmount0Delta(sqrtPriceNext, sqrtPriceCurrent, liquidity);
        }
 
-        if (zeroForOne && sqrtPriceNext < sqrtPriceTarget) {
-            sqrtPriceNext = sqrtPriceTarget;
-        }
-
-        if (!zeroForOne && sqrtPriceNext > sqrtPriceTarget) {
-            sqrtPriceNext = sqrtPriceTarget;
-        }
 
        
         return (sqrtPriceNext, amountIn, amountOut, feeAmount,zeroForOne);

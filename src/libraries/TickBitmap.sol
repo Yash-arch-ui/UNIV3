@@ -9,11 +9,9 @@ library TickBitmap {
         wordPos= int16(tick>>8);
         bitPos=uint8(uint24(tick %256));
     }
-    function flipTick(Bitmap storage self,int24 tick)
-    internal
+    function flipTick(Bitmap storage self,int24 tick) internal
 {
-    (int16 wordPos, uint8 bitPos)
-        = positions(tick);
+    (int16 wordPos, uint8 bitPos)  = positions(tick);
 
     self.words[wordPos] ^= (
         uint256(1) << bitPos
