@@ -5,10 +5,13 @@ import "./libraries/Position.sol";
 import "./libraries/Tick.sol";
 import "./interfaces/ICLAMMPOOL.sol";
 import "./libraries/FullMath.sol";
+import "./libraries/TickMath.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 contract PositionManager is ERC721{
     using Position for Position.PositionInfo;
     address public pool;
+    address public token0;
+    address public token1;
 
     mapping(uint256 => Position.PositionInfo) public positions;// mapping each id to position struct 
     uint256 public nextTokenId;
@@ -41,22 +44,47 @@ contract PositionManager is ERC721{
         require(tickLower < tickUpper, "INVALID_RANGE");
 
         require(liquidity > 0, "ZERO_LIQUIDITY");
+      
+         Position.PositionInfo storage position = positions[tokenId];
         uint256 sqrtPriceX96= ICLAMMPool(pool).sqrtPriceX96();
+        uint160 sqrtPriceA = TickMath.getSqrtRatioAtTick(tickLower);
+
+        uint160 sqrtPriceB = TickMath.getSqrtRatioAtTick(tickUpper);
+        uint128 liquidity;
+        // CURRENT PRICE BELOW RANGE 
+
+        if (sqrtPriceX96 <= sqrtPriceA){
+            liquidity =LiquidityAmounts.getLiquidityForAmount0(sqrtPriceA, sqrtPriceB, amount0Desired);
+        }
+        // CURRENT PRICE ABOVE RANGE 
+        else if (sqrtPriceX96 >= sqrtPriceB){
+            liquidity= LiquidityAmounts.getLiquidityForAmount1(sqrtPriceA, sqrtPriceB, amount1Desired);
+
+        }
+        // CURRENT PRICE INSIDE RANGE 
+        else 
+        {
+            uint128 liquidity0= LiquidityAmounts.getLiquidityForAmount0(sqrtPriceX96, sqrtPriceB, amount0Desired);
+            uint128 liquidity1= LiquidityAmounts.getLiquidityForAmount1(sqrtPriceA, sqrtPrieX96, amount1Desired);
+            liquidity = liquidity0 < liquidity1 ? liquidity0 : liquidity1;
+        }
+        IERC20(token0).transferFrom(msg.sender, address(this), amount0Desired);
+        IERC20(token1).transferFrom(msg.sender, address(this), amount1Desired);
+            
         tokenId = ++nextTokenId;
         _safeMint(msg.sender, tokenId);
-         Position.PositionInfo storage position = positions[tokenId];
+        
         position.tickLower = tickLower;
         position.tickUpper = tickUpper;
-        position.liquidity += liquidity;
-         
-        ICLAMMPool(pool).modifyPosition(tickLower,tickUpper,int128(liquidity));
-         
+        position.liquidity += liquidity;         
 
         (uint256 feeGrowth0, uint256 feeGrowth1) = ICLAMMPool(pool).getFeeGrowthGlobals();
         (uint256 feeInside0, uint256 feeInside1) = ICLAMMPool(pool).getFeeGrowthInside(tickLower, tickUpper);
 
         position.feeGrowthInside0Last = feeInside0;
         position.feeGrowthInside0Last= feeInside1;
+        ICLAMMPool(pool).modifyPosition(tickLower,tickUpper,liquidity);
+
         emit PositionUpdated(
             msg.sender,
             tickLower,

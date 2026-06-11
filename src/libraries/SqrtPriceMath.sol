@@ -65,4 +65,17 @@ library SqrtPriceMath {
             )
         );
     }
+
+    function getNextSqrtPriceFromInput(uint160 sqrtPriceCurrent, uint128 liquidity, uint256 amountIn, bool zeroForOne) internal pure returns(uint128)
+    {
+        if(zeroForOne){
+             return getNextSqrtPriceFromAmount0(
+            sqrtPriceCurrent,
+            liquidity,
+            amountIn
+        );
+
+        }
+        return getNextSqrtPriceFromAmount1(sqrtPriceCurrent, liquidity, amountIn);
+    }
 }
