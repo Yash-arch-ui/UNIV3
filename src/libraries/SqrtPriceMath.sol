@@ -76,6 +76,7 @@ library SqrtPriceMath {
         );
 
         }
+        
         return getNextSqrtPriceFromAmount1(sqrtPriceCurrent, liquidity, amountIn);
     }
 }

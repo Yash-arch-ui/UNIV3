@@ -4,7 +4,8 @@ import "./FixedPoint96.sol";
 import "./FullMath.sol";
 
 library LiquidityAmounts {
-    function getLiquiditywrtAmount0(
+
+    function getLiquidityForAmount0(
         uint160 sqrtPriceA,
         uint160 sqrtPriceB,
         uint256 amount0

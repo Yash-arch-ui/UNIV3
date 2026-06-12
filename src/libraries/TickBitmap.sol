@@ -4,7 +4,7 @@ pragma solidity ^0.8.19;
 library TickBitmap {
 
     struct Bitmap {
-        
+
         mapping(int16 => uint256) words;
     }
 

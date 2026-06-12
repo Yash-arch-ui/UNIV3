@@ -13,7 +13,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract CLAMMPool{
     using TickBitmap for TickBitmap.Bitmap;
-    TickBitmap.Bitmap internal bitmap;
+    TickBitmap.Bitmap private bitmap;
 
     address public token0;
     address public token1;
@@ -79,7 +79,7 @@ contract CLAMMPool{
         currentTick= tick;
     }
 
-    function swap( bool zeroForOne, uint256 amountSpecified) external{
+    function swap(address recipient, bool zeroForOne, uint256 amountSpecified) external{
         // find next tick 
         // compute sqrtpricetarget -> what price is at that boundary 
         // swapmath.computeSwapStep
@@ -128,48 +128,78 @@ contract CLAMMPool{
 
             require(amountIn>0 , "ZEROAMOUNTIN Not Possible ");
             require(IERC20(tokenOut).balanceOf(address(this)) >= amountOut, "NOT ENOUGH MONEY IN THE POOL ");
-            IERC20(tokenIn).transferFrom(msg.sender, address(this),amountIn+feeAmount);
+            IERC20(tokenIn).transferFrom(msg.sender, address(this),amountSpecified);
             sqrtPriceX96= sqrtPriceNext;
             amountRemaining -= (amountIn+feeAmount);
 
             if(sqrtPriceX96== sqrtPriceTarget){
                 crossTick(nextTick);
             }
-            IERC20(tokenOut).transfer(msg.sender, amountOut);
+            IERC20(tokenOut).transfer(recipient, amountOut);
             oracle.writeObservation(currentTick);
         }
     }
+    function swapExactOutput(bool zeroForOne, uint256 amountOutSpecified) external {
+    uint256 amountRemaining = amountOutSpecified; // tracks OUTPUT still owed to user
+
+    while (amountRemaining > 0) {
+
+        int24 nextTick = getNextTick(zeroForOne);
+
+        uint160 sqrtPriceTarget = TickMath.getSqrtRatioAtTick(nextTick);
+
+        (uint160 sqrtPriceNext,
+         uint256 amountIn,
+         uint256 amountOut,
+         uint256 feeAmount,
+         bool decision2
+        ) = SwapMath.computeSwapStepExactOutput(
+            sqrtPriceX96,
+            sqrtPriceTarget,
+            liquidity,
+            amountRemaining,
+            zeroForOne
+        );
+
+        address tokenIn;
+        address tokenOut;
+
+        if (zeroForOne) {
+            if (liquidity > 0) {
+                feeGrowthGlobal0 += feeAmount * 1e18 / liquidity;
+            }
+            tokenIn = token0;
+            tokenOut = token1;
+        } else {
+            if (liquidity > 0) {
+                feeGrowthGlobal1 += feeAmount * 1e18 / liquidity;
+            }
+            tokenIn = token1;
+            tokenOut = token0;
+        }
+
+        require(amountOut > 0, "ZEROAMOUNTOUT Not Possible");
+        require(IERC20(tokenOut).balanceOf(address(this)) >= amountOut, "NOT ENOUGH MONEY IN THE POOL");
+
+        IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn + feeAmount);
+        sqrtPriceX96 = sqrtPriceNext;
+        amountRemaining -= amountOut;
+
+        if (sqrtPriceX96 == sqrtPriceTarget) {
+            crossTick(nextTick);
+        }
+
+        IERC20(tokenOut).transfer(msg.sender, amountOut);
+        oracle.writeObservation(currentTick);
+    }
+}
 
     function getNextTick( bool zeroForOne) internal view returns(int24){
-        if(zeroForOne)
-        /*
-        zeroForOne = true  → selling token0, buying token1
-                   → you're FLOODING the pool with token0
-                   → token0 becomes cheaper
-                   → PRICE GOES DOWN
-                   → tick goes DOWN
-        */
-        {
-            for(int24 tick= currentTick-1; tick >= -10000; tick--){
-                {
-                    if(bitmap.isInitialized(tick)){
-                        return tick;
-                    }
-                    
-                }
-            }
-        }
-        else{
-            for(int24 tick = currentTick+1; tick <=10000; tick ++){
-               if(bitmap.isInitialized(tick)){
-                    return tick;
-                }
-            }
-        }
-        revert ("NO_TICK");
-
+    (int24 nextTick , bool found) = TickBitmap.nextInitializedTick(currentTick, !zeroForOne);
+    require(found, "NO_TICK");
+    return nextTick;
+       
     }
-
     function flash(uint256 amount0, uint256 amount1, address recipient, bytes calldata data)external {
      uint256 reserve0= IERC20(token0).balanceOf(address(this));
      uint256 reserve1= IERC20(token1).balanceOf(address(this)); 
@@ -241,5 +271,16 @@ function getFeeGrowthInside(int24 tickLower,int24 tickUpper)external view return
         feeGrowthGlobal1 -
         feeBelow1 -
         feeAbove1;
+}
+   function collect(address recipient, uint256 amount0, uint256 amount1) external {
+    require(msg.sender == positionManager, "ONLY_POSITION_MANAGER");
+    if (amount0 > 0) IERC20(token0).transfer(recipient, amount0);
+    if (amount1 > 0) IERC20(token1).transfer(recipient, amount1);
+}
+// GETTERS
+
+function getCurrentState() external view returns(uint160, int24, uint128)
+{
+    return(sqrtPriceX96,currentTick, liquidity);
 }
 }
