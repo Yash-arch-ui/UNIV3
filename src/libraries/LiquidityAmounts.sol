@@ -10,6 +10,7 @@ library LiquidityAmounts {
         uint160 sqrtPriceB,
         uint256 amount0
     ) internal pure returns (uint128 liquidity) {
+        // how much liquidity L is generated when a u ser deposits a specific amount of token0(amount0) into a specific price range defined by two square root prices(sqrtPriceA ) and sqrtPrice(B)
         if (sqrtPriceA > sqrtPriceB) {
             (sqrtPriceA, sqrtPriceB) = (sqrtPriceB, sqrtPriceA);
         }
@@ -18,6 +19,9 @@ library LiquidityAmounts {
        liquidity= uint128(
         FullMath.mulDiv(amount0,intermediate, uint256(sqrtPriceB - sqrtPriceA))
        );
+       /*
+           L = delta (X)(root Pa * root Pb)/ (root Pb - root Pa);
+       */
     }
 
     function getLiquidityForAmount1(
@@ -32,6 +36,7 @@ library LiquidityAmounts {
          liquidity = uint128(
             FullMath.mulDiv(amount1,FixedPoint96.Q96,uint256(sqrtPriceB) - uint256(sqrtPriceA)
             ));
+            // L= delta y *(root pb - root Pa)
     }
 
         function getAmount0ForLiquidity(
@@ -39,7 +44,11 @@ library LiquidityAmounts {
         uint160 sqrtPriceB,
         uint128 liquidity
     ) internal pure returns (uint256 amount0) {
-
+/*
+, this one calculates how much token0 (amount0) is required to create a
+ target amount of liquidity between two 
+specific price bounds (sqrtPriceA and sqrtPriceB).
+*/
         if (sqrtPriceA > sqrtPriceB) {
             (sqrtPriceA, sqrtPriceB) = (sqrtPriceB, sqrtPriceA);
         }

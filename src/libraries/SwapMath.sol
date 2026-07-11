@@ -94,8 +94,8 @@ function computeSwapStepExactOutput(
         // target not reached — solve price for the exact amountRemaining output
         amountOut = amountRemaining;
         sqrtPriceNext = zeroForOne
-            ? SqrtPriceMath.getNextSqrtPriceFromAmount1(sqrtPriceCurrent, liquidity, amountOut, false)
-            : SqrtPriceMath.getNextSqrtPriceFromAmount0(sqrtPriceCurrent, liquidity, amountOut, false);
+            ? SqrtPriceMath.getNextSqrtPriceFromAmount1(sqrtPriceCurrent, liquidity, amountOut)
+            : SqrtPriceMath.getNextSqrtPriceFromAmount0(sqrtPriceCurrent, liquidity, amountOut);
     }
 
     amountIn = zeroForOne

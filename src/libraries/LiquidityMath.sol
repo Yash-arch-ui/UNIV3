@@ -9,3 +9,4 @@ library LiquidityMath{
         return liquidity - uint128(-liquidityDelta);
     }
 }
+// this function us a utlitlty designed to calculate a new total liquididty balance after a user either adds or remove liquidty 
