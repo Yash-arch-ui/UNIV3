@@ -82,7 +82,7 @@ library SwapMath {
                 zeroForOne
             );
 
-            feeAmount = amountRemaining - amountIn;
+            feeAmount = amountRemainingLessFee - amountIn;
         }
 
         amountOut = zeroForOne
