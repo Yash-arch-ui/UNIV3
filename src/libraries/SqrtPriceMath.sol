@@ -24,18 +24,18 @@ library SqrtPriceMath {
 
     function getAmount1Delta( uint160 sqrtA, uint160 sqrtB, uint128 liquidity
     ) internal pure returns (uint256) {
-
+                                                                 
         if (sqrtA > sqrtB) {
             (sqrtA, sqrtB) = (sqrtB, sqrtA);
         }
-
+                      
         return FullMath.mulDiv(
             uint256(liquidity),
             uint256(sqrtB - sqrtA),
             FixedPoint96.Q96
         );
     }
-
+                                            
     function getNextSqrtPriceFromAmount0( uint160 sqrtPrice, uint128 liquidity, uint256 amountIn
     ) internal pure returns (uint160) {
 
@@ -77,8 +77,9 @@ library SqrtPriceMath {
         ));
 
         }
-        
+        else {
         return uint128(getNextSqrtPriceFromAmount1(sqrtPriceCurrent, liquidity, amountIn));
+        }
     }
      function getNextSqrtPriceFromOutput(
         uint160 sqrtPriceCurrent,
