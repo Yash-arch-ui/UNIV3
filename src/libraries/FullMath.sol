@@ -2,12 +2,7 @@
 pragma solidity ^0.8.19;
 
 library FullMath {
-
-    function mulDiv(
-        uint256 a,
-        uint256 b,
-        uint256 denominator
-    ) internal pure returns (uint256 result) {
+    function mulDiv(uint256 a, uint256 b, uint256 denominator) internal pure returns (uint256 result) {
         require(denominator > 0, "ZERO_DENOM");
 
         uint256 prod0; // lower 256 bits
@@ -15,8 +10,8 @@ library FullMath {
 
         assembly {
             let mm := mulmod(a, b, not(0))
-            prod0  := mul(a, b)
-            prod1  := sub(sub(mm, prod0), lt(mm, prod0))
+            prod0 := mul(a, b)
+            prod1 := sub(sub(mm, prod0), lt(mm, prod0))
         }
         if (prod1 == 0) {
             return prod0 / denominator;
@@ -26,16 +21,16 @@ library FullMath {
         uint256 remainder;
         assembly {
             remainder := mulmod(a, b, denominator)
-            prod1     := sub(prod1, gt(remainder, prod0))
-            prod0     := sub(prod0, remainder)
+            prod1 := sub(prod1, gt(remainder, prod0))
+            prod0 := sub(prod0, remainder)
         }
 
         uint256 twos = denominator & (~denominator + 1);
 
         assembly {
             denominator := div(denominator, twos)
-            prod0       := div(prod0, twos)
-            twos        := add(div(sub(0, twos), twos), 1)
+            prod0 := div(prod0, twos)
+            twos := add(div(sub(0, twos), twos), 1)
         }
 
         prod0 |= prod1 * twos;
@@ -51,11 +46,7 @@ library FullMath {
         result = prod0 * inv;
     }
 
-    function mulDivRoundingUp(
-        uint256 a,
-        uint256 b,
-        uint256 denominator
-    ) internal pure returns (uint256 result) {
+    function mulDivRoundingUp(uint256 a, uint256 b, uint256 denominator) internal pure returns (uint256 result) {
         result = mulDiv(a, b, denominator);
         if (mulmod(a, b, denominator) > 0) {
             result += 1;
