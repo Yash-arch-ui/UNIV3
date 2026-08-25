@@ -9,7 +9,6 @@ library Position {
         uint256 feeGrowthInside0Last;
         uint256 feeGrowthInside1Last;
 
-
         uint256 tokensOwed0;
         uint256 tokensOwed1;
     }
